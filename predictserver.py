@@ -15,10 +15,10 @@ app = Flask(__name__)
 wet_model = joblib.load("wet_model.pkl")
 dry_model = joblib.load("dry_model.pkl")
 
-india_holidays = holidays.India()
 
 # Indian Standard Time
 IST = pytz.timezone("Asia/Kolkata")
+india_holidays = holidays.India(years=range(2024, 2030))
 
 # ==========================================================
 # CONFIGURATION
