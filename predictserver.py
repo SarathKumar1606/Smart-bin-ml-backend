@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import holidays
 import os
+import pytz
 
 # ==========================================================
 # APP INITIALIZATION
@@ -11,12 +12,13 @@ import os
 
 app = Flask(__name__)
 
-# Load ML models (ensure these .pkl files exist in repo)
 wet_model = joblib.load("wet_model.pkl")
 dry_model = joblib.load("dry_model.pkl")
 
-# Indian Holidays Engine (auto updates yearly)
 india_holidays = holidays.India()
+
+# Indian Standard Time
+IST = pytz.timezone("Asia/Kolkata")
 
 # ==========================================================
 # CONFIGURATION
@@ -100,6 +102,7 @@ def get_holiday_factor(current_date):
 def home():
     return "Smart Dustbin ML Backend Running"
 
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "healthy"})
@@ -114,7 +117,7 @@ def predict():
             return jsonify({"error": "Invalid JSON"}), 400
 
         # --------------------------------------------------
-        # Extract Inputs Safely
+        # Extract Inputs
         # --------------------------------------------------
         wet_level = float(data.get("wet_level", 0))
         dry_level = float(data.get("dry_level", 0))
@@ -124,7 +127,14 @@ def predict():
         )
         weather_condition = str(data.get("weather_condition", "normal"))
 
-        now = datetime.now()
+        # --------------------------------------------------
+        # Use IST Time (Cloud Driven)
+        # --------------------------------------------------
+        now = datetime.now(IST)
+
+        current_date_str = now.strftime("%d-%m-%Y")
+        current_time_str = now.strftime("%H:%M:%S")
+        day_name_str = now.strftime("%A")
 
         # --------------------------------------------------
         # Holiday Engine
@@ -155,9 +165,6 @@ def predict():
         wet_rate = max(float(wet_model.predict(input_df)[0]), 0.01)
         dry_rate = max(float(dry_model.predict(input_df)[0]), 0.01)
 
-        # --------------------------------------------------
-        # Remaining Time (Threshold = 90%)
-        # --------------------------------------------------
         wet_hours = max((WET_THRESHOLD - wet_level) / wet_rate, 0)
         dry_hours = max((DRY_THRESHOLD - dry_level) / dry_rate, 0)
 
@@ -175,7 +182,7 @@ def predict():
         )
 
         # --------------------------------------------------
-        # Response
+        # RESPONSE (Everything preserved + date/time added)
         # --------------------------------------------------
         return jsonify({
             "selected_bin_for_pickup": str(selected_bin),
@@ -188,7 +195,12 @@ def predict():
             "pickup_required_immediately": pickup_required_immediately,
             "is_holiday_today": bool(is_holiday),
             "holiday_name": str(holiday_name) if holiday_name else None,
-            "holiday_factor_used": float(holiday_factor)
+            "holiday_factor_used": float(holiday_factor),
+
+            # NEW CLOUD DRIVEN TIME
+            "current_date": current_date_str,
+            "current_time": current_time_str,
+            "day_name": day_name_str
         })
 
     except Exception as e:
